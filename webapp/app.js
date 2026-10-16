@@ -142,14 +142,64 @@ function onEdit() {
   renderBits(); renderParities(); previewMasks();
 }
 
-function applyPreset(name) {
-  const s = JSON.parse(JSON.stringify(presets[name]));
-  cur = { name: s.name, card_format: s.card_format, parities: s.parities,
-          format_type: s.format_type, status: s.status, site_code: s.site_code };
+function loadSpec(spec) {
+  const s = JSON.parse(JSON.stringify(spec));
+  cur = { name: s.name, card_format: s.card_format, parities: s.parities || [],
+          format_type: s.format_type, status: s.status, site_code: s.site_code || 0 };
   $("name").value = cur.name; $("sitecode").value = cur.site_code;
   $("ftype").value = cur.format_type; $("status").value = cur.status;
   $("cardfmt").value = cur.card_format;
   renderBits(); renderParities(); previewMasks();
+}
+function applyPreset(name) { loadSpec(presets[name]); }
+
+// ---------- formatos preconfigurados (guardados por el usuario) ----------
+let saved = [];   // [{name, spec}]
+async function loadSaved() {
+  try { const j = await api("/api/wg/saved"); saved = j.saved || []; }
+  catch (e) { saved = []; }
+  renderSaved();
+}
+function renderSaved() {
+  const box = $("savedlist"); box.innerHTML = "";
+  if (!saved.length) { box.innerHTML = '<div class="hint">Sin formatos guardados aún. Arma uno y pulsa "Guardar".</div>'; return; }
+  saved.forEach((e) => {
+    const s = e.spec || {};
+    const tipo = { 3: "entrada", 1: "salida", 2: "interno" }[s.format_type] || s.format_type;
+    const d = document.createElement("div"); d.className = "item";
+    d.innerHTML = `<span class="nm">${esc(e.name)}</span>
+      <span class="meta">${esc(s.card_format || "")} · ${tipo}${s.site_code ? " · site " + s.site_code : ""}</span>
+      <button class="btn mini" data-a="edit">Editar</button>
+      <button class="btn mini yellow" data-a="add">Agregar a la tabla</button>
+      <span class="x" title="borrar">✕</span>`;
+    d.querySelector('[data-a="edit"]').onclick = () => { loadSpec(s); msg($("savedmsg"), `"${e.name}" cargado en el editor.`, "ok"); };
+    d.querySelector('[data-a="add"]').onclick = () => {
+      tabla.push(JSON.parse(JSON.stringify(s))); renderTabla();
+      msg($("savedmsg"), `"${e.name}" agregado a la tabla a cargar.`, "ok");
+    };
+    d.querySelector(".x").onclick = () => deleteSaved(e.name);
+    box.appendChild(d);
+  });
+}
+async function savePreset() {
+  readFields();
+  const name = (cur.name || "").trim();
+  if (!name) { msg($("savedmsg"), "Ponle un nombre al formato (campo Nombre del editor) antes de guardar.", "err"); return; }
+  const dup = saved.some(e => e.name === name);
+  if (dup && !confirm(`Ya existe un formato guardado "${name}". ¿Reemplazarlo?`)) return;
+  try {
+    const j = await api("/api/wg/save_preset", { name, spec: cur });
+    saved = j.saved || []; renderSaved();
+    msg($("savedmsg"), `Guardado "${name}". Lo puedes cargar cuando quieras sin leer tarjeta.`, "ok");
+  } catch (e) { msg($("savedmsg"), e.message, "err"); }
+}
+async function deleteSaved(name) {
+  if (!confirm(`¿Borrar el formato guardado "${name}"?`)) return;
+  try {
+    const j = await api("/api/wg/delete_preset", { name });
+    saved = j.saved || []; renderSaved();
+    msg($("savedmsg"), `Borrado "${name}".`, "");
+  } catch (e) { msg($("savedmsg"), e.message, "err"); }
 }
 
 function autoSplit() {
@@ -404,9 +454,11 @@ async function init() {
   $("btnmanadd").onclick = manualAdd;
   $("btndetect").onclick = detectFormat;
   $("btnreadclear").onclick = () => { reads = []; renderReads(); $("candlist").innerHTML = ""; msg($("detmsg"), "", ""); };
+  $("btnsave").onclick = savePreset;
   renderReads();
   applyPreset(j.presets[0].name);
   renderTabla();
+  loadSaved();
   setInterval(tick, 2000); tick();
 }
 init();

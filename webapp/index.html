@@ -72,6 +72,9 @@
     </div>
     <div id="bitsview" class="bits"></div>
     <div id="parities"></div>
+    <div class="row">
+      <button class="btn" id="btnsave">★ Guardar como preconfigurado</button>
+    </div>
     <div class="msg" id="editmsg"></div>
   </div>
 
@@ -89,6 +92,16 @@
     <div class="row">
       <button class="btn" id="btnadd">Agregar a la tabla ▾</button>
     </div>
+  </div>
+
+  <!-- FORMATOS PRECONFIGURADOS -->
+  <div class="card full">
+    <h2>Formatos preconfigurados</h2>
+    <div class="hint">Formatos ya listos, guardados con un nombre. <b>Editar</b> los carga en el editor;
+      <b>Agregar a la tabla</b> los manda directo a la tabla de carga, sin leer tarjeta. Para guardar
+      uno nuevo, ármalo en el editor (con su Nombre) y pulsa <b>★ Guardar como preconfigurado</b>.</div>
+    <div class="list" id="savedlist"></div>
+    <div class="msg" id="savedmsg"></div>
   </div>
 
   <!-- TABLA -->

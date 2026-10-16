@@ -31,7 +31,7 @@ import tempfile
 from http.server import ThreadingHTTPServer
 
 import zk_panel
-from wiegand_tool import backup, dbedit, detect, loader, sqlgen
+from wiegand_tool import backup, dbedit, detect, loader, sqlgen, userpresets
 from wiegand_tool.core import FormatError, Parity, WiegandFormat
 from wiegand_tool.presets import PRESET_STATUS, PRESETS
 
@@ -118,6 +118,8 @@ class Handler(zk_panel.Handler):
             return self._json(
                 {"presets": [preset_to_spec(n) for n in PRESETS], "names": list(PRESETS)}
             )
+        if p == "/api/wg/saved":
+            return self._json({"saved": userpresets.load()})
         return super().do_GET()
 
     def _read_json(self):
@@ -162,11 +164,32 @@ class Handler(zk_panel.Handler):
                 return self._wg_rollback(data)
             if p == "/api/wg/detect":
                 return self._wg_detect(data)
+            if p == "/api/wg/save_preset":
+                return self._wg_save_preset(data)
+            if p == "/api/wg/delete_preset":
+                return self._wg_delete_preset(data)
         except (FormatError, loader.LoadError, ValueError) as exc:
             return self._json({"error": str(exc)}, 400)
         return self._json({"error": "ruta desconocida"}, 404)
 
     # -- endpoints --------------------------------------------------------- #
+    def _wg_save_preset(self, data):
+        """Guarda el formato actual como preconfigurado (validandolo antes)."""
+        name = (data.get("name") or "").strip()
+        spec = data.get("spec") or {}
+        if not name:
+            return self._json({"error": "pon un nombre para el preset"}, 400)
+        # Valida que el spec sea un formato correcto antes de guardarlo.
+        format_from_spec(spec)
+        saved = userpresets.save(name, spec)
+        return self._json({"saved": saved, "name": name})
+
+    def _wg_delete_preset(self, data):
+        name = (data.get("name") or "").strip()
+        if not name:
+            return self._json({"error": "falta el nombre"}, 400)
+        return self._json({"saved": userpresets.delete(name)})
+
     def _wg_detect(self, data):
         """Lecturas crudas del Arduino + numero impreso -> formatos candidatos."""
         cands = detect.detect(data.get("reads") or [])
