@@ -37,6 +37,12 @@ from wiegand_tool.presets import PRESET_STATUS, PRESETS
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webapp")
 
+# Formato fijo de la version de produccion: el ultimo que pidio Marcelo
+# (Wiegand26 site 12). Se clava en codigo a partir de la semilla, asi la
+# version de produccion siempre carga ESE formato sin depender del JSON editable.
+PROD_NAME = userpresets.DEFAULT_PRESETS[0]["name"]
+PROD_SPEC = json.loads(json.dumps(userpresets.DEFAULT_PRESETS[0]["spec"]))
+
 
 # --------------------------------------------------------------------------- #
 # Conversion spec JSON <-> WiegandFormat
@@ -95,6 +101,10 @@ def _options_cmd():
 # Handler: extiende el de zk_panel con rutas /api/wg/* y la pagina del editor
 # --------------------------------------------------------------------------- #
 class Handler(zk_panel.Handler):
+    # En True la app corre en modo produccion (solo carga el formato
+    # preconfigurado; sin panel ni editor). Lo fija main() con --prod.
+    PROD = False
+
     def _static(self, rel: str, ctype: str):
         path = os.path.join(STATIC_DIR, rel)
         if not os.path.isfile(path):
@@ -102,10 +112,81 @@ class Handler(zk_panel.Handler):
         with open(path, "rb") as fh:
             return self._send(fh.read(), ctype)
 
+    # -- modo produccion --------------------------------------------------- #
+    def _get_prod(self, p):
+        """GET en produccion: pagina minima + estado + protocolo del reloj.
+
+        Sirve prod.html, su JS y el CSS compartido; expone el formato fijo;
+        y deja pasar /api/state, /dl/, /captures/ y el protocolo PUSH del
+        reloj (super). Bloquea el panel crudo y todo el editor.
+        """
+        if p in ("/", "/index.html"):
+            return self._static("prod.html", "text/html; charset=utf-8")
+        if p == "/prod.js":
+            return self._static("prod.js", "application/javascript; charset=utf-8")
+        if p == "/app.css":
+            return self._static("app.css", "text/css; charset=utf-8")
+        if p == "/api/wg/prod_info":
+            return self._json({"name": PROD_NAME, "spec": PROD_SPEC})
+        if p in ("/panel", "/api/preview", "/app.js", "/index.html") or p.startswith("/api/wg/"):
+            return self._send("not found", code=404)
+        return super().do_GET()
+
+    def _post_prod(self, p):
+        """POST en produccion: solo la carga del formato fijo (+ su preview).
+
+        Bloquea los endpoints del panel humano y del editor; deja pasar el
+        protocolo del reloj (super).
+        """
+        if p in ("/api/setfile", "/api/queue", "/api/getfile", "/api/raw", "/api/clear"):
+            return self._send("not found", code=404)
+        if p.startswith("/api/wg/"):
+            if p not in ("/api/wg/prod_load", "/api/wg/prod_load_preview"):
+                return self._json({"error": "no disponible en modo produccion"}, 404)
+            data = self._read_json()
+            if data is None:
+                return self._json({"error": "json invalido"}, 400)
+            try:
+                if p == "/api/wg/prod_load_preview":
+                    return self._wg_prod_load_preview(data)
+                return self._wg_prod_load(data)
+            except (FormatError, loader.LoadError, ValueError) as exc:
+                return self._json({"error": str(exc)}, 400)
+        return super().do_POST()
+
+    def _prod_build(self):
+        """Construye y registra el update.sql del formato fijo de produccion."""
+        fmt = format_from_spec(PROD_SPEC)
+        sql = sqlgen.build_rewrite_block([fmt], keep_factory=True)
+        opts = sqlgen.rewrite_options([fmt], keep_factory=True)
+        normalized = sql.replace("\r\n", "\n").replace("\r", "\n")
+        payload = normalized.encode("utf-8")
+        if payload.startswith(b"\xef\xbb\xbf"):
+            payload = payload[3:]
+        return _register_file("u.sql", payload, opts)
+
+    def _wg_prod_load_preview(self, data):
+        self._prod_build()
+        steps = self._load_steps(data)
+        return self._json(
+            {"steps": [{"cmd": s.cmd, "descripcion": s.descripcion} for s in steps]}
+        )
+
+    def _wg_prod_load(self, data):
+        sn = (data.get("sn") or "").strip()
+        if not sn or sn == "all":
+            return self._json({"error": "elige un SN especifico (no 'all')"}, 400)
+        self._prod_build()
+        steps = self._load_steps(data)
+        ids = [zk_panel.enqueue(sn, s.cmd) for s in steps]
+        return self._json({"queued": len(ids), "sn": sn, "ids": ids, "formato": PROD_NAME})
+
     def do_GET(self):  # noqa: N802
         from urllib.parse import urlparse
 
         p = urlparse(self.path).path
+        if self.PROD:
+            return self._get_prod(p)
         if p in ("/", "/index.html"):
             return self._static("index.html", "text/html; charset=utf-8")
         if p == "/app.js":
@@ -134,6 +215,8 @@ class Handler(zk_panel.Handler):
         from urllib.parse import urlparse
 
         p = urlparse(self.path).path
+        if self.PROD:
+            return self._post_prod(p)
         if not p.startswith("/api/wg/"):
             return super().do_POST()
 
@@ -375,7 +458,12 @@ def main():
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--myip", help="IP LAN de esta PC (si no se detecta sola)")
     ap.add_argument("--capdir", default="captures")
+    ap.add_argument("--prod", action="store_true",
+                    help="modo produccion: pagina minima que solo carga el formato "
+                         "preconfigurado; sin panel ni editor")
     args = ap.parse_args()
+
+    Handler.PROD = args.prod
 
     zk_panel.CAP_DIR = args.capdir
     os.makedirs(args.capdir, exist_ok=True)
@@ -396,7 +484,11 @@ def main():
     zk_panel.G["port"] = args.port
 
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    zk_panel.log(f"App Wiegand en  http://{ip}:{args.port}/   (panel crudo en /panel)")
+    if args.prod:
+        zk_panel.log(f"App Wiegand (PRODUCCION) en  http://{ip}:{args.port}/   "
+                     f"— solo carga '{PROD_NAME}'; sin panel ni editor")
+    else:
+        zk_panel.log(f"App Wiegand en  http://{ip}:{args.port}/   (panel crudo en /panel)")
     zk_panel.log(
         f"Apunta el reloj: SET OPTIONS WebServerURLModel=0,WebServerPort={args.port},"
         f"ICLOCKSVRURL={ip},IsSupportSSL=0   y luego REBOOT"
