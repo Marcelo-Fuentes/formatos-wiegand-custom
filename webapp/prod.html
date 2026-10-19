@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cargar formato — IN01</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>Cargar formato Wiegand — IN01</h1>
+  <span class="sub" id="hdrsub">producción</span>
+</header>
+
+<div class="wrap">
+  <!-- FORMATO -->
+  <div class="card full">
+    <h2>Formato a cargar</h2>
+    <div class="list">
+      <div class="item">
+        <span class="nm" id="fmtname">—</span>
+        <span class="meta" id="fmtmeta"></span>
+      </div>
+    </div>
+    <div class="hint">Esta versión carga únicamente el formato preconfigurado de arriba.
+      Elige el reloj y pulsa <b>Cargar en el reloj</b>: el reloj se reinicia y queda con ese formato.</div>
+  </div>
+
+  <!-- CARGA -->
+  <div class="card full">
+    <h2>Cargar en el reloj IN01</h2>
+    <div class="grid3">
+      <div><label class="lbl">SN destino</label><select id="sn"></select></div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink)">
+          <input type="checkbox" id="dobackup" checked> Respaldar ZKDB.db primero
+        </label>
+      </div>
+      <div style="display:flex;align-items:flex-end;justify-content:flex-end">
+        <span class="devchip" id="devchip"><span class="d"></span><span id="devtxt">Sin relojes</span></span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="btnloadprev">Ver comandos exactos</button>
+      <button class="btn yellow" id="btnload">Cargar en el reloj (reinicia)</button>
+    </div>
+    <div class="cmdbox" id="loadview" style="display:none"></div>
+    <div class="msg" id="loadmsg"></div>
+    <div class="hint">La carga deja el <code>update.sql</code>, hace <code>chmod</code>, <code>sync</code> y
+      <code>REBOOT</code>: el reloj se reinicia y aplica el archivo al arrancar. Los comandos van
+      solo al SN elegido.</div>
+  </div>
+</div>
+
+<script src="/prod.js"></script>
+</body>
+</html>
