@@ -9,6 +9,9 @@ propone el formato listo para cargar en el reloj IN01.
 
 ## 1. Qué necesitas
 
+> Si el PC aún no tiene Python, Git ni el IDE de Arduino, sigue antes
+> [INSTALACION.md](INSTALACION.md).
+
 | Elemento | Detalle |
 |---|---|
 | Arduino | Uno, Nano o Mega (5 V). Con ESP32 hace falta un conversor de nivel. |

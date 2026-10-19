@@ -10,6 +10,8 @@ el **archivo de actualización** que los carga en relojes **ZKTeco IN01**
 
 ## Cómo se usa (app web local)
 
+¿PC nuevo? Instalación paso a paso (Python, Git, Arduino, firewall, reloj): [docs/INSTALACION.md](docs/INSTALACION.md).
+
 ```bash
 python3 app.py --port 8080 --myip <IP_LAN_DE_ESTA_PC>
 ```
