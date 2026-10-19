@@ -74,6 +74,8 @@ El panel crudo de ZK Commander sigue disponible en `/panel`.
 
 ## Detectar el formato de una tarjeta con Arduino
 
+Manual paso a paso: [docs/MANUAL_LECTOR_ARDUINO.md](docs/MANUAL_LECTOR_ARDUINO.md).
+
 Sirve para descubrir qué formato usa una tarjeta cuando solo se conoce el número
 **impreso** en ella.
 
